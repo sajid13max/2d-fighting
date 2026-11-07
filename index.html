@@ -1,0 +1,661 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>2D Arcade Fighter - Custom Background & Audio</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+            -webkit-touch-callout: none;
+        }
+
+        /* Lock body to screen height to eliminate all scrolling */
+        body {
+            background: #0f172a;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            height: 100svh;
+            /* Modern mobile viewport fix */
+            margin: 0;
+            padding: 5px;
+            font-family: sans-serif;
+            color: white;
+            overflow: hidden;
+            /* Stops page from scrolling */
+        }
+
+        /* Game container scales to fit landscape mobile screens perfectly */
+        #game-container {
+            position: relative;
+            width: 100%;
+            max-width: 750px;
+            aspect-ratio: 16 / 9;
+            max-height: 70vh;
+            /* Ensures it never overflows vertically */
+            background: #87ceeb;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+            border-radius: 8px;
+            overflow: hidden;
+            display: none;
+        }
+
+        canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: block;
+            pointer-events: none;
+            background: url('background.png') no-repeat center center;
+            /* Add your image here */
+            background-size: cover;
+        }
+
+        #ground-layer {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 15.55%;
+            background: url('background_pitch.png') no-repeat center center;
+            background-size: cover;
+            z-index: 2;
+        }
+
+        /* Selection screen fits mobile landscape bounds */
+        #char-select-screen {
+            width: 100%;
+            max-width: 750px;
+            aspect-ratio: 16 / 9;
+            max-height: 75vh;
+            background: linear-gradient(135deg, #1e293b, #0f172a);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            border-radius: 8px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+            border: 2px solid #334155;
+            padding: 10px;
+        }
+
+        .select-title {
+            font-size: clamp(16px, 3.5vw, 24px);
+            font-weight: bold;
+            margin-bottom: 4px;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+        }
+
+        .step-indicator {
+            font-size: clamp(11px, 2vw, 15px);
+            color: #38bdf8;
+            margin-bottom: 10px;
+            font-weight: bold;
+        }
+
+        .character-grid {
+            display: flex;
+            gap: 12px;
+            max-width: 100%;
+            overflow-x: auto;
+            padding: 5px;
+        }
+
+        .char-card {
+            width: clamp(90px, 18vw, 130px);
+            height: clamp(120px, 25vw, 170px);
+            background: #334155;
+            border: 3px solid #64748b;
+            border-radius: 10px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            flex-shrink: 0;
+        }
+
+        .char-card:hover {
+            transform: translateY(-3px);
+            border-color: #38bdf8;
+            background: #475569;
+        }
+
+        .char-preview-img {
+            width: 65%;
+            height: 55%;
+            object-fit: cover;
+            border-radius: 6px;
+            background: #1e293b;
+            margin-bottom: 6px;
+        }
+
+        .char-name {
+            font-weight: bold;
+            font-size: clamp(11px, 1.8vw, 14px);
+        }
+
+        /* In-Game UI */
+        .ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            padding: 2.5%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 3;
+            pointer-events: none;
+        }
+
+        .health-bar {
+            width: 38%;
+            height: 14px;
+            background: #334155;
+            border: 2px solid #fff;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .health-fill {
+            height: 100%;
+            background: #22c55e;
+            transition: width 0.1s linear;
+        }
+
+        #p2-health {
+            transform: scaleX(-1);
+        }
+
+        .name-label {
+            color: #fff;
+            font-weight: bold;
+            margin-bottom: 3px;
+            text-shadow: 1px 1px 2px #000;
+            font-size: clamp(10px, 1.8vw, 13px);
+        }
+
+        #game-over-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(15, 23, 42, 0.85);
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            z-index: 10;
+        }
+
+        #game-over-text {
+            font-size: clamp(20px, 4vw, 32px);
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+
+        #restart-btn-overlay {
+            padding: 8px 16px;
+            font-size: clamp(12px, 2.5vw, 18px);
+            font-weight: bold;
+            background: #22c55e;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+
+        /* Mobile Touch Controls - Padded on the right to avoid Netlify badge */
+        .touch-controls {
+            display: none;
+            justify-content: space-between;
+            width: 100%;
+            max-width: 750px;
+            margin-top: 8px;
+            padding-right: 35px;
+            /* Keeps buttons away from the Netlify badge in bottom right */
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 5px;
+        }
+
+        .btn {
+            width: clamp(38px, 10vw, 50px);
+            height: clamp(38px, 10vw, 50px);
+            background: #3b82f6;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            font-size: clamp(9px, 2.2vw, 13px);
+            font-weight: bold;
+            cursor: pointer;
+            touch-action: manipulation;
+        }
+
+        .btn:active {
+            transform: scale(0.95);
+        }
+
+        .btn-punch {
+            background: #ef4444;
+        }
+
+        .btn-kick {
+            background: #f59e0b;
+        }
+
+        .btn-special {
+            background: #a855f7;
+        }
+
+        .btn-restart {
+            background: #10b981;
+            font-size: clamp(7px, 1.8vw, 11px);
+        }
+
+
+        /* --- All your other styles above --- */
+
+        /* Mobile Touch Controls */
+        .touch-controls {
+            display: none;
+            justify-content: space-between;
+            width: 100%;
+            max-width: 750px;
+            margin-top: 8px;
+            margin-bottom: 15px;
+            /* Pushes the controls slightly higher up from the bottom edge */
+            padding-right: 50px;
+            /* Safely clears the Netlify badge area */
+            
+        }
+/* Hides the Netlify deployment badge if it overlaps your UI */
+#netlify-deploy-badge, iframe[src*="netlify"] {
+    display: none !important;
+}
+        /* ... button styles ... */
+
+        /* --- PASTE THE MEDIA QUERY TAG RIGHT HERE --- */
+        @media screen and (max-width: 900px) and (orientation: portrait) {
+            body::before {
+                content: "🔄 Please rotate your device to Landscape mode for the best arcade experience!";
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100vw;
+                height: 100vh;
+                background: rgba(15, 23, 42, 0.95);
+                color: #38bdf8;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                text-align: center;
+                font-size: 18px;
+                font-weight: bold;
+                padding: 20px;
+                z-index: 9999;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- Two-Step Character Selection Menu -->
+    <div id="char-select-screen">
+        <div class="select-title" id="select-title">CHOOSE YOUR FIGHTER</div>
+        <div class="step-indicator" id="step-indicator">STEP 1: SELECT YOUR HERO</div>
+        <div class="character-grid" id="selection-grid"></div>
+    </div>
+
+    <!-- Game Container -->
+    <div id="game-container">
+        <div class="ui-layer">
+            <div>
+                <div class="name-label" id="p1-name-label">PLAYER 1</div>
+                <div class="health-bar">
+                    <div id="p1-health" class="health-fill" style="width: 100%;"></div>
+                </div>
+            </div>
+            <div>
+                <div class="name-label" id="p2-name-label" style="text-align: right;">CPU</div>
+                <div class="health-bar">
+                    <div id="p2-health" class="health-fill" style="width: 100%;"></div>
+                </div>
+            </div>
+        </div>
+
+        <div id="game-over-screen">
+            <div id="game-over-text">VICTORY!</div>
+            <button id="restart-btn-overlay" onclick="returnToMenu()">MAIN MENU</button>
+        </div>
+
+        <canvas id="gameCanvas" width="800" height="450"></canvas>
+        <div id="ground-layer"></div>
+    </div>
+
+    <!-- Touch Controls for Mobile -->
+    <div class="touch-controls" id="touch-controls-wrapper">
+        <div class="btn-group">
+            <button class="btn" id="btn-left">◀</button>
+            <button class="btn" id="btn-right">▶</button>
+            <button class="btn" id="btn-jump">▲</button>
+        </div>
+        <div class="btn-group">
+            <button class="btn btn-punch" id="btn-punch">PUNCH</button>
+            <button class="btn btn-kick" id="btn-kick">KICK</button>
+            <button class="btn btn-special" id="btn-special">SPECIAL</button>
+            <button class="btn btn-restart" id="btn-restart">RESET</button>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // --- Custom Audio Setup ---
+        const soundEffects = {
+            lightPunch: new Audio('punch.mp3'),
+            heavyKick: new Audio('kick.wav'),
+            hit: new Audio('hit.wav'),
+            jump: new Audio('jump.mp3')
+        };
+
+        function playSound(type) {
+            if (soundEffects[type]) {
+                soundEffects[type].currentTime = 0;
+                soundEffects[type].play().catch(e => console.log("Audio play prevented or missing:", e));
+            }
+        }
+
+        function playSpecialSound(soundPath) {
+            if (soundPath) {
+                const specialAudio = new Audio(soundPath);
+                specialAudio.currentTime = 0;
+                specialAudio.play().catch(e => console.log("Special audio missing:", e));
+            }
+        }
+
+        class Fighter {
+            constructor({ x, y, image, isP1, specialSound }) {
+                this.startX = x; this.startY = y; this.image = image; this.isP1 = isP1;
+                this.specialSoundPath = specialSound;
+                this.reset();
+            }
+
+            reset() {
+                this.x = this.startX; this.y = this.startY;
+                this.width = 80; this.height = 120;
+                this.vx = 0; this.vy = 0; this.health = 100;
+                this.isGrounded = false; this.currentAction = null; this.attackCooldown = false;
+            }
+
+            draw() {
+                if (this.image && this.image.complete && this.image.naturalWidth !== 0) {
+                    ctx.drawImage(this.image, this.x, this.y, this.width, this.height);
+                } else {
+                    ctx.fillStyle = this.isP1 ? '#2563eb' : '#dc2626';
+                    ctx.fillRect(this.x, this.y, this.width, this.height);
+                }
+
+                if (this.currentAction) {
+                    ctx.save();
+                    const fxX = this.isP1 ? this.x + this.width + 10 : this.x - 30;
+                    const fxY = this.y + (this.currentAction === 'kick' ? 70 : 40);
+                    ctx.translate(fxX, fxY);
+                    if (!this.isP1) ctx.scale(-1, 1);
+
+                    if (this.currentAction === 'punch') {
+                        ctx.beginPath(); ctx.arc(0, 0, 40, -Math.PI / 4, Math.PI / 4, false);
+                        ctx.lineWidth = 6; ctx.strokeStyle = '#38bdf8'; ctx.stroke();
+                    } else if (this.currentAction === 'kick') {
+                        ctx.beginPath(); ctx.arc(0, 0, 55, -Math.PI / 3, Math.PI / 3, false);
+                        ctx.lineWidth = 10; ctx.strokeStyle = '#f59e0b'; ctx.stroke();
+                    } else if (this.currentAction === 'special') {
+                        ctx.beginPath(); ctx.arc(0, -20, 65, -Math.PI / 2, Math.PI / 2, false);
+                        ctx.lineWidth = 12; ctx.strokeStyle = '#a855f7'; ctx.shadowColor = '#d8b4fe'; ctx.shadowBlur = 15; ctx.stroke();
+                    }
+                    ctx.restore();
+                }
+            }
+
+            update() {
+                this.x += this.vx; this.y += this.vy;
+                if (this.y + this.height < 380) { this.vy += 0.8; this.isGrounded = false; }
+                else { this.vy = 0; this.y = 380 - this.height; this.isGrounded = true; }
+                if (this.x < 0) this.x = 0;
+                if (this.x + this.width > canvas.width) this.x = canvas.width - this.width;
+                this.draw();
+            }
+
+            performAction(actionType, target) {
+                if (this.attackCooldown || this.health <= 0) return;
+                this.currentAction = actionType; this.attackCooldown = true;
+
+                let damage = 10, reach = 50, duration = 150;
+                if (actionType === 'punch') {
+                    damage = 8; reach = 45; duration = 120;
+                    playSound('lightPunch');
+                }
+                else if (actionType === 'kick') {
+                    damage = 15; reach = 60; duration = 180;
+                    playSound('heavyKick');
+                }
+                else if (actionType === 'special') {
+                    damage = 22; reach = 80; duration = 250;
+                    playSpecialSound(this.specialSoundPath); // Plays this specific character's unique sound!
+                }
+
+                const attackX = this.isP1 ? this.x + this.width : this.x - reach;
+                const attackBox = { x: attackX, y: this.y + 20, width: reach, height: 50 };
+
+                if (
+                    attackBox.x < target.x + target.width && attackBox.x + attackBox.width > target.x &&
+                    attackBox.y < target.y + target.height && attackBox.y + attackBox.height > target.y
+                ) {
+                    target.health = Math.max(0, target.health - damage);
+                    playSound('hit');
+                    const targetHealthBar = target.isP1 ? 'p1-health' : 'p2-health';
+                    document.getElementById(targetHealthBar).style.width = target.health + '%';
+                }
+
+                setTimeout(() => { this.currentAction = null; }, duration);
+                setTimeout(() => { this.attackCooldown = false; }, duration + 200);
+            }
+        }
+
+        // --- Separate Rosters with Custom Character Special Sounds ---
+        const playerRoster = [
+            { src: 'rigan.png', name: 'RIGAN', specialSound: 'rigan_special.mp3' },
+            { src: 'sayem.png', name: 'SAYEM', specialSound: 'sayem.wav' },
+            { src: 'shahed.png', name: 'SHAHED', specialSound: 'shahed.mp3' },
+            { src: 'abid.png', name: 'ABID', specialSound: 'abid.mp3' }
+        ];
+
+        const opponentRoster = [
+            { src: 'shekh.png', name: 'Apa', specialSound: 'shekh_voice.mp3' },
+            { src: 'modi.png', name: 'Dula vai', specialSound: 'modi.mp3' },
+        ];
+
+        let selectedP1 = null;
+        let selectedP2 = null;
+        let player, cpu;
+        const keys = { a: false, d: false };
+        let isGameOver = false;
+        let gameRunning = false;
+
+        function renderSelectScreen(isOpponentStep = false) {
+            const grid = document.getElementById('selection-grid');
+            grid.innerHTML = '';
+            const rosterToDisplay = isOpponentStep ? opponentRoster : playerRoster;
+
+            rosterToDisplay.forEach(char => {
+                const card = document.createElement('div');
+                card.className = 'char-card';
+                card.onclick = () => handleSelect(char, isOpponentStep);
+
+                card.innerHTML = `
+            <img src="${char.src}" class="char-preview-img" alt="${char.name}">
+            <div class="char-name">${char.name}</div>
+        `;
+                grid.appendChild(card);
+            });
+        }
+
+        function handleSelect(charObj, isOpponentStep) {
+            if (!isOpponentStep) {
+                selectedP1 = charObj;
+                document.getElementById('select-title').innerText = "CHOOSE YOUR OPPONENT";
+                document.getElementById('step-indicator').innerText = "STEP 2: SELECT OPPONENT BOSS";
+                document.getElementById('step-indicator').style.color = "#ef4444";
+                renderSelectScreen(true);
+            } else {
+                selectedP2 = charObj;
+                startBattle();
+            }
+        }
+
+        function startBattle() {
+            document.getElementById('char-select-screen').style.display = 'none';
+            document.getElementById('game-container').style.display = 'block';
+            document.getElementById('touch-controls-wrapper').style.display = 'flex';
+
+            document.getElementById('p1-name-label').innerText = `${selectedP1.name} (PLAYER)`;
+            document.getElementById('p2-name-label').innerText = `${selectedP2.name} (CPU)`;
+
+            const p1Image = new Image(); p1Image.src = selectedP1.src;
+            const p2Image = new Image(); p2Image.src = selectedP2.src;
+
+            player = new Fighter({ x: 100, y: 200, image: p1Image, isP1: true, specialSound: selectedP1.specialSound });
+            cpu = new Fighter({ x: 600, y: 200, image: p2Image, isP1: false, specialSound: selectedP2.specialSound });
+
+            document.getElementById('p1-health').style.width = '100%';
+            document.getElementById('p2-health').style.width = '100%';
+            document.getElementById('game-over-screen').style.display = 'none';
+            isGameOver = false;
+            gameRunning = true;
+        }
+
+        function returnToMenu() {
+            gameRunning = false;
+            selectedP1 = null;
+            selectedP2 = null;
+
+            document.getElementById('select-title').innerText = "CHOOSE YOUR FIGHTER";
+            document.getElementById('step-indicator').innerText = "STEP 1: SELECT YOUR HERO";
+            document.getElementById('step-indicator').style.color = "#38bdf8";
+
+            document.getElementById('game-container').style.display = 'none';
+            document.getElementById('touch-controls-wrapper').style.display = 'none';
+            document.getElementById('char-select-screen').style.display = 'flex';
+
+            renderSelectScreen(false);
+        }
+
+        function restartGame() {
+            player.reset(); cpu.reset();
+            document.getElementById('p1-health').style.width = '100%';
+            document.getElementById('p2-health').style.width = '100%';
+            document.getElementById('game-over-screen').style.display = 'none';
+            isGameOver = false;
+        }
+
+        // Controls
+        window.addEventListener('keydown', (e) => {
+            if (!gameRunning || isGameOver) return;
+            if (e.key === 'a' || e.key === 'A') keys.a = true;
+            if (e.key === 'd' || e.key === 'D') keys.d = true;
+            if (e.key === 'w' || e.key === 'W') { if (player.isGrounded) { player.vy = -15; playSound('jump'); } }
+            if (e.key === 'j' || e.key === 'J') player.performAction('punch', cpu);
+            if (e.key === 'k' || e.key === 'K') player.performAction('kick', cpu);
+            if (e.key === 'l' || e.key === 'L') player.performAction('special', cpu);
+        });
+
+        window.addEventListener('keyup', (e) => {
+            if (e.key === 'a' || e.key === 'A') keys.a = false;
+            if (e.key === 'd' || e.key === 'D') keys.d = false;
+        });
+
+        const bindTouch = (id, startFn, endFn) => {
+            const btn = document.getElementById(id);
+            if (!btn) return;
+            btn.addEventListener('touchstart', (e) => { e.preventDefault(); startFn(); });
+            btn.addEventListener('touchend', (e) => { e.preventDefault(); if (endFn) endFn(); });
+            btn.addEventListener('mousedown', () => startFn());
+            btn.addEventListener('mouseup', () => { if (endFn) endFn(); });
+        };
+
+        bindTouch('btn-left', () => keys.a = true, () => keys.a = false);
+        bindTouch('btn-right', () => keys.d = true, () => keys.d = false);
+        bindTouch('btn-jump', () => { if (player && player.isGrounded) { player.vy = -15; playSound('jump'); } });
+        bindTouch('btn-punch', () => player && player.performAction('punch', cpu));
+        bindTouch('btn-kick', () => player && player.performAction('kick', cpu));
+        bindTouch('btn-special', () => player && player.performAction('special', cpu));
+        bindTouch('btn-restart', () => restartGame());
+
+        function updateCPU() {
+            if (!cpu || cpu.health <= 0 || isGameOver) { if (cpu) cpu.vx = 0; return; }
+
+            const distanceToPlayer = cpu.x - (player.x + player.width);
+
+            if (distanceToPlayer > 50) { cpu.vx = -2.5; }
+            else if (distanceToPlayer < 10) { cpu.vx = 2.5; }
+            else {
+                cpu.vx = 0;
+                if (Math.random() < 0.05) {
+                    const rand = Math.random();
+                    if (rand < 0.5) cpu.performAction('punch', player);
+                    else if (rand < 0.8) cpu.performAction('kick', player);
+                    else cpu.performAction('special', player);
+                }
+            }
+
+            if (Math.random() < 0.005 && cpu.isGrounded) { cpu.vy = -12; playSound('jump'); }
+        }
+
+        function gameLoop() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            if (gameRunning) {
+                if (!isGameOver) {
+                    player.vx = 0;
+                    if (keys.a) player.vx = -5;
+                    if (keys.d) player.vx = 5;
+
+                    updateCPU();
+
+                    if (player.health <= 0 || cpu.health <= 0) {
+                        isGameOver = true;
+                        const text = player.health > 0 ? "VICTORY!" : "DEFEAT!";
+                        document.getElementById('game-over-text').innerText = text;
+                        document.getElementById('game-over-screen').style.display = 'flex';
+                    }
+                }
+                player.update(); cpu.update();
+            }
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Initialize Menu on Load
+        renderSelectScreen(false);
+        gameLoop();
+    </script>
+</body>
+
+</html>
